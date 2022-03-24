@@ -11,6 +11,8 @@
 //! ```
 use std::{env, sync::Arc, time::Duration};
 
+mod neteaseapi;
+
 use serenity::{
     async_trait,
     client::{Client, Context, EventHandler},
@@ -300,16 +302,31 @@ async fn play_fade(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
 
     if let Some(handler_lock) = manager.get(guild_id) {
         let mut handler = handler_lock.lock().await;
+        let t = if url.contains("music.163.com") {
+            SourceType::Netease
+        } else {
+            SourceType::Ytdl
+        };
 
-        let source = match input::ytdl(&url).await {
-            Ok(source) => source,
-            Err(why) => {
-                println!("Err starting source: {:?}", why);
+        let source = match t {
+            SourceType::Netease => match neteaseapi::netease(&url).await {
+                Ok(source) => source,
+                Err(why) => {
+                    println!("Err starting source: {:?}", why);
+                    check_msg(msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await);
 
-                check_msg(msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await);
+                    return Ok(());
+                }
+            },
+            SourceType::Ytdl => match input::ytdl(&url).await {
+                Ok(source) => source,
+                Err(why) => {
+                    println!("Err starting source: {:?}", why);
+                    check_msg(msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await);
 
-                return Ok(());
-            }
+                    return Ok(());
+                }
+            },
         };
 
         // This handler object will allow you to, as needed,
@@ -395,6 +412,11 @@ impl VoiceEventHandler for SongEndNotifier {
     }
 }
 
+enum SourceType {
+    Ytdl,
+    Netease,
+}
+
 #[command]
 #[only_in(guilds)]
 async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
@@ -431,6 +453,11 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
     if let Some(handler_lock) = manager.get(guild_id) {
         let mut handler = handler_lock.lock().await;
+        let t = if url.contains("music.163.com") {
+            SourceType::Netease
+        } else {
+            SourceType::Ytdl
+        };
 
         // Here, we use lazy restartable sources to make sure that we don't pay
         // for decoding, playback on tracks which aren't actually live yet.
