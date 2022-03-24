@@ -7,7 +7,7 @@ use std::{
 
 use crate::neteaseapi::encrypto::Crypto;
 use anyhow::{anyhow, Result};
-use reqwest::{Client, Response, Url};
+use reqwest::{Client, Proxy, Response, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use songbird::input::{children_to_reader, Codec, Container, Input, Metadata};
@@ -93,6 +93,8 @@ impl NeteaseClient {
     fn new() -> Result<Self> {
         let client = reqwest::Client::builder()
             .user_agent(USER_AGENT)
+            .proxy(Proxy::http("http://0.0.0.0:8080")?)
+            .proxy(Proxy::https("http://0.0.0.0:8080")?)
             .timeout(Duration::from_secs(10))
             .build()?;
 
