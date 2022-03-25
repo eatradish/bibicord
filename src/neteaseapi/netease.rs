@@ -1,18 +1,15 @@
 use std::{
     collections::HashMap,
-    io::BufReader,
     process::{Command, Stdio},
     time::Duration,
 };
 
 use crate::neteaseapi::encrypto::Crypto;
 use anyhow::{anyhow, Result};
-use reqwest::{Client, Proxy, Response, Url};
+use reqwest::{Client, Response, Url};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use songbird::input::{children_to_reader, Codec, Container, Input, Metadata};
-use tracing::{error, log::trace};
-use urlqstring::QueryParams;
+use tracing::info;
 
 #[derive(Deserialize, Serialize)]
 struct SongResult {
@@ -93,8 +90,6 @@ impl NeteaseClient {
     fn new() -> Result<Self> {
         let client = reqwest::Client::builder()
             .user_agent(USER_AGENT)
-            .proxy(Proxy::http("http://0.0.0.0:8080")?)
-            .proxy(Proxy::https("http://0.0.0.0:8080")?)
             .timeout(Duration::from_secs(10))
             .build()?;
 
@@ -185,49 +180,31 @@ pub(crate) async fn _netease(uri: &str) -> Result<Input> {
     let client = NeteaseClient::new()?;
     let urls = get_song_url(&client, &[id]).await?;
     let url = &urls[0];
-    let from_pipe_args = &["-i", url, "-f", "mp3", "pipe:1"];
-    let to_pipe_args = &[
+    let from_pipe_args = &[
         "-i",
-        "-",
-        "-f",
-        "mp3",
-        "-i",
-        "pipe:1",
+        url,
+        "-acodec",
+        "pcm_f32le",
         "-ac",
         "2",
         "-ar",
-        "480000",
-        "-acodec",
-        "pcm_f32le",
+        "48000",
+        "-f",
+        "s16le",
         "-",
     ];
-    let mut from_pipe_command = Command::new("ffmpeg")
+
+    let from_pipe_command = Command::new("ffmpeg")
         .args(from_pipe_args)
         .stdin(Stdio::null())
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()?;
-    let stderr = from_pipe_command.stderr.take();
-    if let Some(stderr) = stderr {
-        let read = BufReader::new(stderr);
-        error!("{:?}", read);
-    }
-    let taken_stdout = from_pipe_command
-        .stdout
-        .take()
-        .ok_or(anyhow!("Can not read stdout!"))?;
-    let to_pipe_command = Command::new("ffmpeg")
-        .args(to_pipe_args)
-        .stdin(taken_stdout)
-        .stderr(Stdio::null())
         .stdout(Stdio::piped())
         .spawn()?;
     let metadata = get_song_metadata(&client, &[id]).await?;
-    trace!("netease music metadata {:?}", metadata);
+    info!("netease music metadata {:?}", metadata);
 
     Ok(Input::new(
         true,
-        children_to_reader::<f32>(vec![from_pipe_command, to_pipe_command]),
+        children_to_reader::<f32>(vec![from_pipe_command]),
         Codec::FloatPcm,
         Container::Raw,
         Some(metadata),
@@ -254,5 +231,5 @@ async fn test_get_song_url() {
 #[tokio::test]
 async fn test_get_song_detail() {
     let client = NeteaseClient::new().unwrap();
-    let detail = get_song_metadata(&client, &[26209670]).await.unwrap();
+    let _ = get_song_metadata(&client, &[26209670]).await.unwrap();
 }

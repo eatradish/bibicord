@@ -590,6 +590,9 @@ async fn now(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
     if let Some(handler_lock) = manager.get(guild_id) {
         let handler = handler_lock.lock().await;
         let list = handler.queue().current_queue();
+        if list.last().is_none() {
+            check_msg(msg.channel_id.say(&ctx.http, "List is empty!").await);
+        }
         let metadata = list.last().unwrap().metadata();
         let title = metadata.title.as_ref();
         let artist = metadata.artist.as_ref();
