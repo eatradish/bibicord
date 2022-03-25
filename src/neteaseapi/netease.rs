@@ -1,14 +1,18 @@
 use std::{
     collections::HashMap,
+    io::ErrorKind,
     process::{Command, Stdio},
     time::Duration,
 };
 
 use crate::neteaseapi::encrypto::Crypto;
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use reqwest::{Client, Response, Url};
 use serde::{Deserialize, Serialize};
-use songbird::input::{children_to_reader, Codec, Container, Input, Metadata};
+use songbird::input::{
+    children_to_reader, restartable::Restart, Codec, Container, Input, Metadata, Restartable,
+};
 use tracing::info;
 
 #[derive(Deserialize, Serialize)]
@@ -65,11 +69,11 @@ impl From<&SongDetailSong> for Metadata {
             track: None,
             artist: Some(artists),
             date: None,
-            channels: None,
+            channels: Some(2),
             channel: None,
             start_time: None,
             duration,
-            sample_rate: None,
+            sample_rate: Some(48000),
             source_url: None,
             title: song.name.to_owned(),
             thumbnail: None,
@@ -101,6 +105,52 @@ impl NeteaseClient {
 
         Ok(self.client.post(url).query(&params).send().await?)
     }
+}
+
+struct NeteaseRestarter {
+    url: String,
+    client: NeteaseClient,
+}
+
+impl NeteaseRestarter {
+    fn new(url: &str, client: NeteaseClient) -> Self {
+        Self {
+            url: url.to_string(),
+            client,
+        }
+    }
+}
+
+#[async_trait]
+impl Restart for NeteaseRestarter {
+    async fn call_restart(
+        &mut self,
+        time: Option<Duration>,
+    ) -> songbird::input::error::Result<Input> {
+        Ok(_netease(&self.url, time)
+            .await
+            .map_err(|e| std::io::Error::new(ErrorKind::Other, e))?)
+    }
+
+    async fn lazy_init(
+        &mut self,
+    ) -> songbird::input::error::Result<(Option<Metadata>, Codec, Container)> {
+        let url = &self.url;
+        let metadata = get_song_metadata(
+            &self.client,
+            &[get_music_id(&url).map_err(|e| std::io::Error::new(ErrorKind::Other, e))?],
+        )
+        .await
+        .map_err(|e| std::io::Error::new(ErrorKind::Other, e))?;
+
+        Ok((Some(metadata), Codec::FloatPcm, Container::Raw))
+    }
+}
+
+pub async fn _netease_restartable(url: &str, lazy: bool) -> Result<Restartable> {
+    let client = NeteaseClient::new()?;
+
+    Ok(Restartable::new(NeteaseRestarter::new(url, client), lazy).await?)
 }
 
 fn crypto_params(params: HashMap<&str, &str>) -> Result<Vec<(String, String)>> {
@@ -175,12 +225,16 @@ fn get_music_id(url: &str) -> Result<u64> {
     Ok(id)
 }
 
-pub(crate) async fn _netease(uri: &str) -> Result<Input> {
+pub(crate) async fn _netease(uri: &str, time: Option<Duration>) -> Result<Input> {
     let id = get_music_id(uri)?;
     let client = NeteaseClient::new()?;
     let urls = get_song_url(&client, &[id]).await?;
     let url = &urls[0];
-    let from_pipe_args = &[
+    let time = time.unwrap_or_else(|| Duration::from_secs(0));
+    let time = format!("{:.3}", time.as_secs_f64());
+    let from_pipe_args = vec![
+        "-ss",
+        time.as_str(),
         "-i",
         url,
         "-acodec",

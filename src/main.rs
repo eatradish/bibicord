@@ -13,6 +13,7 @@ use std::{env, sync::Arc, time::Duration};
 
 mod neteaseapi;
 
+use neteaseapi::netease;
 use serenity::{
     async_trait,
     client::{Client, Context, EventHandler},
@@ -461,15 +462,31 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
         // Here, we use lazy restartable sources to make sure that we don't pay
         // for decoding, playback on tracks which aren't actually live yet.
-        let source = match Restartable::ytdl(url, true).await {
-            Ok(source) => source,
-            Err(why) => {
-                println!("Err starting source: {:?}", why);
-
-                check_msg(msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await);
-
-                return Ok(());
-            }
+        let source = match t {
+            SourceType::Ytdl => {
+                match Restartable::ytdl(url, true).await {
+                    Ok(source) => source,
+                    Err(why) => {
+                        println!("Err starting source: {:?}", why);
+        
+                        check_msg(msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await);
+        
+                        return Ok(());
+                    }
+                }
+            },
+            SourceType::Netease => {
+                match neteaseapi::netease_restartable(&url, true).await {
+                    Ok(source) => source,
+                    Err(why) => {
+                        println!("Err starting source: {:?}", why);
+        
+                        check_msg(msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await);
+        
+                        return Ok(());
+                    }
+                }
+            },
         };
 
         handler.enqueue_source(source.into());
