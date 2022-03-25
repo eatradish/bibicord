@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use songbird::input::{
     children_to_reader, restartable::Restart, Codec, Container, Input, Metadata, Restartable,
 };
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Deserialize, Serialize)]
 struct SongResult {
@@ -58,6 +58,31 @@ struct SongDetailSongArtist {
     name: Option<String>,
 }
 
+#[derive(Deserialize, Debug)]
+struct DjDetail {
+    program: Option<DjDetailProgram>,
+}
+
+#[derive(Deserialize, Debug)]
+struct DjDetailProgram {
+    #[serde(rename(deserialize = "mainSong"))]
+    main_song: Option<DjDetailProgramMainSong>,
+}
+
+#[derive(Deserialize, Debug)]
+struct DjDetailProgramMainSong {
+    name: Option<String>,
+    id: Option<u64>,
+    #[serde(default)]
+    artists: Vec<SongDetailSongArtist>,
+    duration: Option<u64>,
+}
+
+enum NeteaseTyoe {
+    Normal,
+    Dj,
+}
+
 const USER_AGENT: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1";
 const BASE_URL: &str = "https://music.163.com/weapi";
 
@@ -65,6 +90,28 @@ impl From<&SongDetailSong> for Metadata {
     fn from(song: &SongDetailSong) -> Self {
         let artists = artist_trans(&song.artists);
         let duration = song.duration.map(Duration::from_millis);
+
+        Self {
+            track: None,
+            artist: Some(artists),
+            date: None,
+            channels: Some(2),
+            channel: None,
+            start_time: None,
+            duration,
+            sample_rate: Some(48000),
+            source_url: None,
+            title: song.name.to_owned(),
+            thumbnail: None,
+        }
+    }
+}
+
+impl From<&DjDetailProgramMainSong> for Metadata {
+    fn from(song: &DjDetailProgramMainSong) -> Self {
+        let artists = artist_trans(&song.artists);
+        let duration = song.duration.map(Duration::from_millis);
+
         Self {
             track: None,
             artist: Some(artists),
@@ -137,12 +184,26 @@ impl Restart for NeteaseRestarter {
         &mut self,
     ) -> songbird::input::error::Result<(Option<Metadata>, Codec, Container)> {
         let url = &self.url;
-        let metadata = get_song_metadata(
-            &self.client,
-            &[get_music_id(url).map_err(|e| std::io::Error::new(ErrorKind::Other, e))?],
-        )
-        .await
-        .map_err(|e| std::io::Error::new(ErrorKind::Other, e))?;
+        let t = if url.contains("program") {
+            NeteaseTyoe::Dj
+        } else {
+            NeteaseTyoe::Normal
+        };
+
+        let metadata = match t {
+            NeteaseTyoe::Normal => get_song_metadata(
+                &self.client,
+                &[get_music_id(url).map_err(|e| std::io::Error::new(ErrorKind::Other, e))?],
+            )
+            .await
+            .map_err(|e| std::io::Error::new(ErrorKind::Other, e))?,
+            NeteaseTyoe::Dj => {
+                get_dj_music_url_and_detail(url)
+                    .await
+                    .map_err(|e| std::io::Error::new(ErrorKind::Other, e))?
+                    .1
+            }
+        };
 
         Ok((Some(metadata), Codec::FloatPcm, Container::Raw))
     }
@@ -201,6 +262,7 @@ async fn get_song_metadata(client: &NeteaseClient, ids: &[u64]) -> Result<Metada
         .await?
         .json::<SongDetailResult>()
         .await?;
+    debug!("{:?}", result);
     let result = result
         .songs
         .first()
@@ -215,7 +277,8 @@ fn get_music_id(url: &str) -> Result<u64> {
     let url = Url::parse(&url)?;
     let parms = url.query().ok_or_else(|| anyhow!("Url is not right!"))?;
     let id = parms
-        .split('&').find(|x| x.starts_with("id="))
+        .split('&')
+        .find(|x| x.starts_with("id="))
         .ok_or_else(|| anyhow!("Url is not right!"))?
         .strip_prefix("id=")
         .unwrap()
@@ -224,18 +287,52 @@ fn get_music_id(url: &str) -> Result<u64> {
     Ok(id)
 }
 
-pub(crate) async fn _netease(uri: &str, time: Option<Duration>) -> Result<Input> {
-    let id = get_music_id(uri)?;
+async fn get_dj_music_url_and_detail(url: &str) -> Result<(String, Metadata)> {
+    let dj_id = get_music_id(url)?.to_string();
     let client = NeteaseClient::new()?;
-    let urls = get_song_url(&client, &[id]).await?;
-    let url = &urls[0];
+    let url = format!("{}/{}", BASE_URL, "/dj/program/detail");
+    let mut params = HashMap::new();
+    params.insert("id", dj_id.as_str());
+    let dj_detail = client.post(&url, params).await?.json::<DjDetail>().await?;
+    let main_song = dj_detail
+        .program
+        .as_ref()
+        .and_then(|x| x.main_song.as_ref());
+    let id = main_song.and_then(|x| x.id);
+    let id = id.ok_or_else(|| anyhow!("Can not get song id from dj detail!"))?;
+    let song_url = get_song_url(&client, &[id]).await?;
+    let metadata = Metadata::from(main_song.ok_or_else(|| anyhow!("Can not get metadata!"))?);
+    debug!("{:?}", metadata);
+
+    Ok((song_url[0].to_owned(), metadata))
+}
+
+pub(crate) async fn _netease(uri: &str, time: Option<Duration>) -> Result<Input> {
+    let client = NeteaseClient::new()?;
+    dbg!(uri);
+    let t = if uri.contains("program") {
+        NeteaseTyoe::Dj
+    } else {
+        NeteaseTyoe::Normal
+    };
+    let (url, metadata) = match t {
+        NeteaseTyoe::Dj => get_dj_music_url_and_detail(uri).await?,
+        NeteaseTyoe::Normal => {
+            let id = get_music_id(uri)?;
+            let urls = get_song_url(&client, &[id]).await?;
+            let url = urls[0].to_owned();
+            let metadata = get_song_metadata(&client, &[id]).await?;
+
+            (url, metadata)
+        }
+    };
     let time = time.unwrap_or_else(|| Duration::from_secs(0));
     let time = format!("{:.3}", time.as_secs_f64());
     let from_pipe_args = vec![
         "-ss",
         time.as_str(),
         "-i",
-        url,
+        url.as_str(),
         "-acodec",
         "pcm_f32le",
         "-ac",
@@ -252,7 +349,6 @@ pub(crate) async fn _netease(uri: &str, time: Option<Duration>) -> Result<Input>
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .spawn()?;
-    let metadata = get_song_metadata(&client, &[id]).await?;
     info!("netease music metadata {:?}", metadata);
 
     Ok(Input::new(
@@ -285,4 +381,16 @@ async fn test_get_song_url() {
 async fn test_get_song_detail() {
     let client = NeteaseClient::new().unwrap();
     let _ = get_song_metadata(&client, &[26209670]).await.unwrap();
+}
+
+#[tokio::test]
+async fn test_get_dj_detail() {
+    let url = "https://music.163.com/#/program?id=2493262449";
+    let (song_url, metadata) = get_dj_music_url_and_detail(url).await.unwrap();
+
+    assert_eq!(
+        song_url.split('/').last().unwrap(),
+        "19716f882ebc8a95bc2abdfe346268c7.mp3"
+    );
+    assert_eq!(metadata.title.unwrap(), "原来你什么都不想要");
 }
