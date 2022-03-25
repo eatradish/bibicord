@@ -64,7 +64,7 @@ const BASE_URL: &str = "https://music.163.com/weapi";
 impl From<&SongDetailSong> for Metadata {
     fn from(song: &SongDetailSong) -> Self {
         let artists = artist_trans(&song.artists);
-        let duration = song.duration.and_then(|x| Some(Duration::from_millis(x)));
+        let duration = song.duration.map(Duration::from_millis);
         Self {
             track: None,
             artist: Some(artists),
@@ -85,7 +85,7 @@ fn artist_trans(artists: &[SongDetailSongArtist]) -> String {
     let artists = artists
         .iter()
         .filter_map(|x| x.name.as_ref())
-        .fold(String::new(), |acc, x| acc + ", " + &x);
+        .fold(String::new(), |acc, x| acc + ", " + x);
 
     artists
 }
@@ -138,7 +138,7 @@ impl Restart for NeteaseRestarter {
         let url = &self.url;
         let metadata = get_song_metadata(
             &self.client,
-            &[get_music_id(&url).map_err(|e| std::io::Error::new(ErrorKind::Other, e))?],
+            &[get_music_id(url).map_err(|e| std::io::Error::new(ErrorKind::Other, e))?],
         )
         .await
         .map_err(|e| std::io::Error::new(ErrorKind::Other, e))?;
@@ -214,9 +214,7 @@ fn get_music_id(url: &str) -> Result<u64> {
     let url = Url::parse(&url)?;
     let parms = url.query().ok_or_else(|| anyhow!("Url is not right!"))?;
     let id = parms
-        .split('&')
-        .filter(|x| x.starts_with("id="))
-        .nth(0)
+        .split('&').find(|x| x.starts_with("id="))
         .ok_or_else(|| anyhow!("Url is not right!"))?
         .strip_prefix("id=")
         .unwrap()
