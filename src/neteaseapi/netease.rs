@@ -84,8 +84,9 @@ impl From<&SongDetailSong> for Metadata {
 fn artist_trans(artists: &[SongDetailSongArtist]) -> String {
     let artists = artists
         .iter()
-        .filter_map(|x| x.name.as_ref())
-        .fold(String::new(), |acc, x| acc + ", " + x);
+        .filter_map(|x| x.name.clone())
+        .collect::<Vec<_>>()
+        .join(", ");
 
     artists
 }
