@@ -2,8 +2,8 @@ use songbird::input::{Input, Restartable};
 
 use self::netease::{_netease, _netease_restartable};
 
-mod netease;
 mod encrypto;
+mod netease;
 use anyhow::Result;
 
 pub(crate) async fn netease(url: &str) -> Result<Input> {
