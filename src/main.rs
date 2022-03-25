@@ -113,6 +113,17 @@ async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
+fn duration_formatter(duration: &Duration) -> String {
+    let seconds = duration.as_secs();
+
+    format!(
+        "{:02}:{:02}:{:02}",
+        seconds / 3600,
+        (seconds / 60) % 60,
+        seconds % 60
+    )
+}
+
 #[command]
 #[only_in(guilds)]
 async fn join(ctx: &Context, msg: &Message) -> CommandResult {
@@ -609,6 +620,7 @@ async fn now(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
         let title = metadata.title.as_ref();
         let artist = metadata.artist.as_ref();
         let url = metadata.source_url.as_ref();
+        let duration = metadata.duration.as_ref();
         let mut s = String::from("Now Playing:\n");
         if let Some(title) = title {
             s.push_str(&format!("{}\n", title));
@@ -618,6 +630,9 @@ async fn now(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
         }
         if let Some(url) = url {
             s.push_str(&format!("{}\n", url))
+        }
+        if let Some(duration) = duration {
+            s.push_str(&format!("{}\n", duration_formatter(duration)))
         }
         check_msg(msg.channel_id.say(&ctx.http, s).await);
     }
@@ -647,7 +662,7 @@ async fn list(ctx: &Context, msg: &Message) -> CommandResult {
                 s.push_str(&format!("{}. {}", i + 1, url));
             }
             if let Some(t) = time {
-                s.push_str(&format!(" {}s", t.as_secs()));
+                s.push_str(&format!(" {}s", duration_formatter(t)));
             }
             s.push('\n');
         }
