@@ -616,7 +616,7 @@ async fn now(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
         if list.last().is_none() {
             check_msg(msg.channel_id.say(&ctx.http, "List is empty!").await);
         }
-        let metadata = list.last().unwrap().metadata();
+        let metadata = list.first().unwrap().metadata();
         let title = metadata.title.as_ref();
         let artist = metadata.artist.as_ref();
         let url = metadata.source_url.as_ref();
@@ -662,7 +662,7 @@ async fn list(ctx: &Context, msg: &Message) -> CommandResult {
                 s.push_str(&format!("{}. {}", i + 1, url));
             }
             if let Some(t) = time {
-                s.push_str(&format!(" {}s", duration_formatter(t)));
+                s.push_str(&duration_formatter(t));
             }
             s.push('\n');
         }
