@@ -51,6 +51,24 @@ impl EventHandler for Handler {
 )]
 struct General;
 
+macro_rules! unwrap_or_show_error {
+    ($f:expr, $msg:ident, $ctx:ident) => {
+        match $f {
+            Ok(source) => source,
+            Err(why) => {
+                println!("Err starting source: {:?}", why);
+                check_msg(
+                    $msg.channel_id
+                        .say(&$ctx.http, "Error sourcing ffmpeg")
+                        .await,
+                );
+
+                return Ok(());
+            }
+        }
+    };
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -320,24 +338,8 @@ async fn play_fade(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
         };
 
         let source = match t {
-            SourceType::Netease => match neteaseapi::netease(&url).await {
-                Ok(source) => source,
-                Err(why) => {
-                    println!("Err starting source: {:?}", why);
-                    check_msg(msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await);
-
-                    return Ok(());
-                }
-            },
-            SourceType::Ytdl => match input::ytdl(&url).await {
-                Ok(source) => source,
-                Err(why) => {
-                    println!("Err starting source: {:?}", why);
-                    check_msg(msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await);
-
-                    return Ok(());
-                }
-            },
+            SourceType::Netease => unwrap_or_show_error!(neteaseapi::netease(&url).await, msg, ctx),
+            SourceType::Ytdl => unwrap_or_show_error!(input::ytdl(&url).await, msg, ctx),
         };
 
         // This handler object will allow you to, as needed,
@@ -473,26 +475,10 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         // Here, we use lazy restartable sources to make sure that we don't pay
         // for decoding, playback on tracks which aren't actually live yet.
         let source = match t {
-            SourceType::Ytdl => match Restartable::ytdl(url, true).await {
-                Ok(source) => source,
-                Err(why) => {
-                    println!("Err starting source: {:?}", why);
-
-                    check_msg(msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await);
-
-                    return Ok(());
-                }
-            },
-            SourceType::Netease => match neteaseapi::netease_restartable(&url, true).await {
-                Ok(source) => source,
-                Err(why) => {
-                    println!("Err starting source: {:?}", why);
-
-                    check_msg(msg.channel_id.say(&ctx.http, "Error sourcing ffmpeg").await);
-
-                    return Ok(());
-                }
-            },
+            SourceType::Ytdl => unwrap_or_show_error!(Restartable::ytdl(url, true).await, msg, ctx),
+            SourceType::Netease => {
+                unwrap_or_show_error!(neteaseapi::netease_restartable(&url, true).await, msg, ctx)
+            }
         };
 
         handler.enqueue_source(source.into());
