@@ -662,7 +662,7 @@ async fn list(ctx: &Context, msg: &Message) -> CommandResult {
                 s.push_str(&format!("{}. {}", i + 1, url));
             }
             if let Some(t) = time {
-                s.push_str(&duration_formatter(t));
+                s.push_str(&format!(" {}", duration_formatter(t)));
             }
             s.push('\n');
         }
