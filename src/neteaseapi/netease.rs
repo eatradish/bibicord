@@ -270,7 +270,7 @@ async fn get_dj_music_url_and_detail(client: &NeteaseClient, url: &str) -> Resul
         .and_then(|x| x.main_song.as_ref());
     let id = main_song.and_then(|x| x.id);
     let id = id.ok_or_else(|| anyhow!("Can not get song id from dj detail!"))?;
-    let song_url = get_song_url(&client, &[id]).await?;
+    let song_url = get_song_url(client, &[id]).await?;
     let metadata = Metadata::from(main_song.ok_or_else(|| anyhow!("Can not get metadata!"))?);
     debug!("{:?}", metadata);
 
