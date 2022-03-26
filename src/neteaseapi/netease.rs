@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::neteaseapi::encrypto::Crypto;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
 use reqwest::{Client, Response, Url};
 use serde::{Deserialize, Serialize};
@@ -77,6 +77,7 @@ enum NeteaseTyoe {
 
 const USER_AGENT: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1";
 const BASE_URL: &str = "https://music.163.com/weapi";
+const BIT_RATE_LIST: &[&str] = &["320000", "192000", "128000"];
 
 impl From<&SongDetailSong> for Metadata {
     fn from(song: &SongDetailSong) -> Self {
@@ -119,7 +120,7 @@ impl NeteaseClient {
         Ok(Self { client })
     }
 
-    async fn post(&self, url: &str, params: HashMap<&str, &str>) -> Result<Response> {
+    async fn post(&self, url: &str, params: &HashMap<&str, &str>) -> Result<Response> {
         let params = crypto_params(params)?;
 
         Ok(self.client.post(url).query(&params).send().await?)
@@ -186,7 +187,7 @@ pub async fn _netease_restartable(url: &str, lazy: bool) -> Result<Restartable> 
     Ok(Restartable::new(NeteaseRestarter::new(url, client), lazy).await?)
 }
 
-fn crypto_params(params: HashMap<&str, &str>) -> Result<Vec<(String, String)>> {
+fn crypto_params(params: &HashMap<&str, &str>) -> Result<Vec<(String, String)>> {
     let params = serde_json::to_string(&params)?;
     let params = Crypto::weapi(&params);
 
@@ -198,22 +199,28 @@ async fn get_song_url(client: &NeteaseClient, ids: &[u64]) -> Result<Vec<String>
     let ids = serde_json::to_string(ids)?;
     let mut params = HashMap::new();
     params.insert("ids", &ids[..]);
-    params.insert("br", "320000");
-    let song_result = client
-        .post(&url, params)
-        .await?
-        .json::<SongResult>()
-        .await?;
-    let urls = song_result
-        .data
-        .into_iter()
-        .map(|x| x.url)
-        .collect::<Vec<_>>();
-    if urls.is_empty() {
-        return Err(anyhow!("Url list is empty!"));
+    for i in BIT_RATE_LIST {
+        params.insert("br", i);
+        let song_result = client
+            .post(&url, &params)
+            .await?
+            .json::<SongResult>()
+            .await?;
+        if song_result.code == 200 {
+            let urls = song_result
+                .data
+                .into_iter()
+                .map(|x| x.url)
+                .collect::<Vec<_>>();
+            if urls.is_empty() {
+                continue;
+            }
+
+            return Ok(urls);
+        }
     }
 
-    Ok(urls)
+    bail!("Can not get song url!")
 }
 
 async fn get_song_metadata(client: &NeteaseClient, ids: &[u64]) -> Result<Metadata> {
@@ -229,7 +236,7 @@ async fn get_song_metadata(client: &NeteaseClient, ids: &[u64]) -> Result<Metada
     params.insert("c", &c[..]);
     params.insert("ids", &ids[..]);
     let result = client
-        .post(&url, params)
+        .post(&url, &params)
         .await?
         .json::<SongDetailResult>()
         .await?;
@@ -258,12 +265,15 @@ fn get_music_id(url: &str) -> Result<u64> {
     Ok(id)
 }
 
-async fn get_dj_music_url_and_detail(client: &NeteaseClient, url: &str) -> Result<(String, Metadata)> {
+async fn get_dj_music_url_and_detail(
+    client: &NeteaseClient,
+    url: &str,
+) -> Result<(String, Metadata)> {
     let dj_id = get_music_id(url)?.to_string();
     let url = format!("{}/{}", BASE_URL, "/dj/program/detail");
     let mut params = HashMap::new();
     params.insert("id", dj_id.as_str());
-    let dj_detail = client.post(&url, params).await?.json::<DjDetail>().await?;
+    let dj_detail = client.post(&url, &params).await?.json::<DjDetail>().await?;
     let main_song = dj_detail
         .program
         .as_ref()
