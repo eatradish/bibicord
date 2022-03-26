@@ -198,7 +198,7 @@ impl Restart for NeteaseRestarter {
             .await
             .map_err(|e| std::io::Error::new(ErrorKind::Other, e))?,
             NeteaseTyoe::Dj => {
-                get_dj_music_url_and_detail(url)
+                get_dj_music_url_and_detail(&self.client, url)
                     .await
                     .map_err(|e| std::io::Error::new(ErrorKind::Other, e))?
                     .1
@@ -287,9 +287,8 @@ fn get_music_id(url: &str) -> Result<u64> {
     Ok(id)
 }
 
-async fn get_dj_music_url_and_detail(url: &str) -> Result<(String, Metadata)> {
+async fn get_dj_music_url_and_detail(client: &NeteaseClient, url: &str) -> Result<(String, Metadata)> {
     let dj_id = get_music_id(url)?.to_string();
-    let client = NeteaseClient::new()?;
     let url = format!("{}/{}", BASE_URL, "/dj/program/detail");
     let mut params = HashMap::new();
     params.insert("id", dj_id.as_str());
@@ -316,7 +315,7 @@ pub(crate) async fn _netease(uri: &str, time: Option<Duration>) -> Result<Input>
         NeteaseTyoe::Normal
     };
     let (url, metadata) = match t {
-        NeteaseTyoe::Dj => get_dj_music_url_and_detail(uri).await?,
+        NeteaseTyoe::Dj => get_dj_music_url_and_detail(&client, uri).await?,
         NeteaseTyoe::Normal => {
             let id = get_music_id(uri)?;
             let urls = get_song_url(&client, &[id]).await?;
@@ -385,8 +384,9 @@ async fn test_get_song_detail() {
 
 #[tokio::test]
 async fn test_get_dj_detail() {
+    let client = NeteaseClient::new().unwrap();
     let url = "https://music.163.com/#/program?id=2493262449";
-    let (song_url, metadata) = get_dj_music_url_and_detail(url).await.unwrap();
+    let (song_url, metadata) = get_dj_music_url_and_detail(&client, url).await.unwrap();
 
     assert_eq!(
         song_url.split('/').last().unwrap(),
