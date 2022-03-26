@@ -89,7 +89,7 @@ impl Crypto {
 
     pub fn aes_encrypt(
         data: &str,
-        key: &Vec<u8>,
+        key: &[u8],
         mode: AesMode,
         iv: Option<&[u8]>,
         encode: fn(&Vec<u8>) -> String,
@@ -103,7 +103,7 @@ impl Crypto {
         encode(&cipher_text)
     }
 
-    pub fn rsa_encrypt(data: &str, key: &Vec<u8>) -> String {
+    pub fn rsa_encrypt(data: &str, key: &[u8]) -> String {
         let rsa = Rsa::public_key_from_pem(key).unwrap();
 
         let prefix = vec![0u8; 128 - data.len()];
