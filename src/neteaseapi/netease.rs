@@ -289,7 +289,6 @@ async fn get_dj_music_url_and_detail(
 
 pub(crate) async fn _netease(uri: &str, time: Option<Duration>) -> Result<Input> {
     let client = NeteaseClient::new()?;
-    dbg!(uri);
     let t = if uri.contains("program") {
         NeteaseTyoe::Dj
     } else {
@@ -324,7 +323,7 @@ pub(crate) async fn _netease(uri: &str, time: Option<Duration>) -> Result<Input>
         "-",
     ];
 
-    let from_pipe_command = Command::new("ffmpeg")
+    let ffmpeg_command = Command::new("ffmpeg")
         .args(from_pipe_args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -333,7 +332,7 @@ pub(crate) async fn _netease(uri: &str, time: Option<Duration>) -> Result<Input>
 
     Ok(Input::new(
         true,
-        children_to_reader::<f32>(vec![from_pipe_command]),
+        children_to_reader::<f32>(vec![ffmpeg_command]),
         Codec::FloatPcm,
         Container::Raw,
         Some(metadata),
@@ -352,15 +351,17 @@ fn test_get_music_id() {
 async fn test_get_song_url() {
     let client = NeteaseClient::new().unwrap();
     let url = get_song_url(&client, &[26209670]).await.unwrap();
-    let filename = url[0].split('/').last().unwrap();
+    let filename = url[0].split('/').last();
 
-    assert_eq!(filename, "fa0240b65deaf3360c8812c629fe1820.mp3");
+    assert_eq!(filename, Some("fa0240b65deaf3360c8812c629fe1820.mp3"));
 }
 
 #[tokio::test]
 async fn test_get_song_detail() {
     let client = NeteaseClient::new().unwrap();
-    let _ = get_song_metadata(&client, &[26209670]).await.unwrap();
+    let metadata = get_song_metadata(&client, &[26209670]).await.unwrap();
+
+    assert_eq!(metadata.title, Some("今、歩き出す君へ。".to_string()))
 }
 
 #[tokio::test]
@@ -373,5 +374,5 @@ async fn test_get_dj_detail() {
         song_url.split('/').last().unwrap(),
         "19716f882ebc8a95bc2abdfe346268c7.mp3"
     );
-    assert_eq!(metadata.title.unwrap(), "原来你什么都不想要");
+    assert_eq!(metadata.title, Some("原来你什么都不想要".to_string()));
 }
