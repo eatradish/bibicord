@@ -48,6 +48,7 @@ struct SongDetailResult {
 #[derive(Deserialize, Debug)]
 struct SongDetailSong {
     name: Option<String>,
+    id: Option<u64>,
     #[serde(default)]
     artists: Vec<SongDetailSongArtist>,
     duration: Option<u64>,
@@ -66,16 +67,7 @@ struct DjDetail {
 #[derive(Deserialize, Debug)]
 struct DjDetailProgram {
     #[serde(rename(deserialize = "mainSong"))]
-    main_song: Option<DjDetailProgramMainSong>,
-}
-
-#[derive(Deserialize, Debug)]
-struct DjDetailProgramMainSong {
-    name: Option<String>,
-    id: Option<u64>,
-    #[serde(default)]
-    artists: Vec<SongDetailSongArtist>,
-    duration: Option<u64>,
+    main_song: Option<SongDetailSong>,
 }
 
 enum NeteaseTyoe {
@@ -88,27 +80,6 @@ const BASE_URL: &str = "https://music.163.com/weapi";
 
 impl From<&SongDetailSong> for Metadata {
     fn from(song: &SongDetailSong) -> Self {
-        let artists = artist_trans(&song.artists);
-        let duration = song.duration.map(Duration::from_millis);
-
-        Self {
-            track: None,
-            artist: Some(artists),
-            date: None,
-            channels: Some(2),
-            channel: None,
-            start_time: None,
-            duration,
-            sample_rate: Some(48000),
-            source_url: None,
-            title: song.name.to_owned(),
-            thumbnail: None,
-        }
-    }
-}
-
-impl From<&DjDetailProgramMainSong> for Metadata {
-    fn from(song: &DjDetailProgramMainSong) -> Self {
         let artists = artist_trans(&song.artists);
         let duration = song.duration.map(Duration::from_millis);
 
