@@ -69,28 +69,34 @@ macro_rules! unwrap_or_show_error {
     };
 }
 
-#[tokio::main]
-async fn main() {
-    tracing_subscriber::fmt::init();
+fn main() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(2)
+        .build()
+        .unwrap();
+    runtime.block_on(async move {
+        tracing_subscriber::fmt::init();
 
-    // Configure the client with your Discord bot token in the environment.
-    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+        // Configure the client with your Discord bot token in the environment.
+        let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
-    let framework = StandardFramework::new()
-        .configure(|c| c.prefix("~"))
-        .group(&GENERAL_GROUP);
+        let framework = StandardFramework::new()
+            .configure(|c| c.prefix("~"))
+            .group(&GENERAL_GROUP);
 
-    let mut client = Client::builder(&token)
-        .event_handler(Handler)
-        .framework(framework)
-        .register_songbird()
-        .await
-        .expect("Err creating client");
+        let mut client = Client::builder(&token)
+            .event_handler(Handler)
+            .framework(framework)
+            .register_songbird()
+            .await
+            .expect("Err creating client");
 
-    let _ = client
-        .start()
-        .await
-        .map_err(|why| println!("Client ended: {:?}", why));
+        let _ = client
+            .start()
+            .await
+            .map_err(|why| println!("Client ended: {:?}", why));
+    })
 }
 
 #[command]
