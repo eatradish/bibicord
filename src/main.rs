@@ -47,7 +47,7 @@ impl EventHandler for Handler {
 #[group]
 #[commands(
     deafen, join, leave, mute, play_fade, play, skip, clear, ping, undeafen, unmute, list, destroy,
-    now, vol
+    now, vol, help
 )]
 struct General;
 
@@ -140,6 +140,24 @@ fn duration_formatter(duration: &Duration) -> String {
         (seconds / 60) % 60,
         seconds % 60
     )
+}
+
+#[command]
+#[only_in(guilds)]
+async fn help(ctx: &Context, msg: &Message) -> CommandResult {
+    let help = r#"Usage:
+~join             join to voice channel
+~play [URL]       play audio from URL
+~now              See now playing
+~list             See current audio queue
+~clean            Clean current audio queue
+~destroy          Clean current audio queue and leave
+~leave            Leave voice channel
+~vol [VOL]        Set volume (0~200)
+"#;
+    check_msg(msg.channel_id.say(&ctx.http, help).await);
+
+    Ok(())
 }
 
 #[command]
