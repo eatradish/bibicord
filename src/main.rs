@@ -47,7 +47,7 @@ impl EventHandler for Handler {
 #[group]
 #[commands(
     deafen, join, leave, mute, play_fade, play, skip, clear, ping, undeafen, unmute, list, destroy,
-    now
+    now, vol
 )]
 struct General;
 
@@ -621,6 +621,42 @@ async fn now(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
             s.push_str(&format!("{}\n", duration_formatter(duration)))
         }
         check_msg(msg.channel_id.say(&ctx.http, s).await);
+    }
+
+    Ok(())
+}
+
+#[command]
+#[only_in(guilds)]
+async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let vol = args.single::<f32>()?;
+    if vol < 0.0 || vol > 200.0 {
+        check_msg(
+            msg.channel_id
+                .say(&ctx.http, "Volume must in 0 ~ 200")
+                .await,
+        );
+
+        return Ok(());
+    }
+    let vol = vol / 100.0;
+    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild_id = guild.id;
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+    if let Some(handler_lock) = manager.get(guild_id) {
+        let handler = handler_lock.lock().await;
+        let list = handler.queue().current_queue();
+        for i in list {
+            i.set_volume(vol)?;
+        }
+        check_msg(
+            msg.channel_id
+                .say(&ctx.http, format!("Volume set to {}", vol * 100.0))
+                .await,
+        );
     }
 
     Ok(())
