@@ -647,17 +647,7 @@ async fn now(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
 #[command]
 #[only_in(guilds)]
 async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let vol = args.single::<f32>()?;
-    if vol < 0.0 || vol > 200.0 {
-        check_msg(
-            msg.channel_id
-                .say(&ctx.http, "Volume must in 0 ~ 200")
-                .await,
-        );
-
-        return Ok(());
-    }
-    let vol = vol / 100.0;
+    let vol = args.single::<String>()?;
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let guild_id = guild.id;
     let manager = songbird::get(ctx)
@@ -667,14 +657,51 @@ async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     if let Some(handler_lock) = manager.get(guild_id) {
         let handler = handler_lock.lock().await;
         let list = handler.queue().current_queue();
-        for i in list {
-            i.set_volume(vol)?;
+        if vol.is_empty() {
+            let entry = list.first();
+            match entry {
+                Some(entry) => {
+                    let vol = entry.get_info().await?.volume;
+                    check_msg(
+                        msg.channel_id
+                            .say(&ctx.http, format!("Volume is {}", vol * 100.0))
+                            .await,
+                    );
+                }
+                None => {
+                    check_msg(msg.channel_id.say(&ctx.http, "Queue is empty!").await);
+                }
+            }
+
+            return Ok(());
         }
-        check_msg(
-            msg.channel_id
-                .say(&ctx.http, format!("Volume set to {}", vol * 100.0))
-                .await,
-        );
+        let vol = vol.parse::<f32>();
+        if let Ok(vol) = vol {
+            if vol < 0.0 || vol > 200.0 {
+                check_msg(
+                    msg.channel_id
+                        .say(&ctx.http, "Volume must in 0 ~ 200")
+                        .await,
+                );
+
+                return Ok(());
+            }
+            let vol = vol / 100.0;
+            for i in list {
+                i.set_volume(vol)?;
+            }
+            check_msg(
+                msg.channel_id
+                    .say(&ctx.http, format!("Volume set to {}", vol * 100.0))
+                    .await,
+            );
+        } else {
+            check_msg(
+                msg.channel_id
+                    .say(&ctx.http, "Volume must in 0 ~ 200")
+                    .await,
+            );
+        }
     }
 
     Ok(())
