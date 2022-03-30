@@ -647,7 +647,6 @@ async fn now(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
 #[command]
 #[only_in(guilds)]
 async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let vol = args.single::<String>()?;
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let guild_id = guild.id;
     let manager = songbird::get(ctx)
@@ -657,7 +656,7 @@ async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     if let Some(handler_lock) = manager.get(guild_id) {
         let handler = handler_lock.lock().await;
         let list = handler.queue().current_queue();
-        if vol.is_empty() {
+        if args.is_empty() {
             let entry = list.first();
             match entry {
                 Some(entry) => {
@@ -675,7 +674,7 @@ async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
             return Ok(());
         }
-        let vol = vol.parse::<f32>();
+        let vol = args.single::<f32>();
         if let Ok(vol) = vol {
             if vol < 0.0 || vol > 200.0 {
                 check_msg(
