@@ -663,7 +663,7 @@ async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                     let vol = entry.get_info().await?.volume;
                     check_msg(
                         msg.channel_id
-                            .say(&ctx.http, format!("Volume is {}", vol * 100.0))
+                            .say(&ctx.http, format!("Volume is {:.0}", vol * 100.0))
                             .await,
                     );
                 }
