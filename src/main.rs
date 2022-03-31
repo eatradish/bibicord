@@ -676,7 +676,7 @@ async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         }
         let vol = args.single::<f32>();
         if let Ok(vol) = vol {
-            if vol < 0.0 || vol > 200.0 {
+            if !(0.0..=200.0).contains(&vol) {
                 check_msg(
                     msg.channel_id
                         .say(&ctx.http, "Volume must in 0 ~ 200")
