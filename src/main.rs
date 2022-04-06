@@ -562,7 +562,7 @@ async fn skip(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         if args.is_empty() {
             let _ = queue.skip();
         } else if let Ok(index) = args.single::<usize>() {
-            if !(1..queue.current_queue().len()).contains(&index) {
+            if index < 1 || index > queue.current_queue().len() {
                 check_msg(
                     msg.channel_id
                         .say(&ctx.http, "Index must 1 to queue length!".to_string())
