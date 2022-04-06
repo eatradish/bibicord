@@ -547,7 +547,7 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
 #[command]
 #[only_in(guilds)]
-async fn skip(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
+async fn skip(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let guild_id = guild.id;
 
@@ -559,7 +559,19 @@ async fn skip(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
     if let Some(handler_lock) = manager.get(guild_id) {
         let handler = handler_lock.lock().await;
         let queue = handler.queue();
-        let _ = queue.skip();
+        if args.is_empty() {
+            let _ = queue.skip();
+        } else if let Ok(index) = args.single::<usize>() {
+            if !(1..queue.current_queue().len()).contains(&index) {
+                check_msg(
+                    msg.channel_id
+                        .say(&ctx.http, "Index must 1 to queue length!".to_string())
+                        .await,
+                )
+            } else {
+                queue.dequeue(index - 1);
+            }
+        }
 
         check_msg(
             msg.channel_id
