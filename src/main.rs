@@ -9,7 +9,7 @@
 //! git = "https://github.com/serenity-rs/serenity.git"
 //! features = ["cache", "framework", "standard_framework", "voice"]
 //! ```
-use std::{env, sync::Arc, time::Duration};
+use std::{collections::HashMap, env, sync::Arc, time::Duration};
 
 mod neteaseapi;
 
@@ -25,6 +25,7 @@ use serenity::{
     },
     http::Http,
     model::{channel::Message, gateway::Ready, misc::Mentionable, prelude::ChannelId},
+    prelude::TypeMapKey,
     Result as SerenityResult,
 };
 
@@ -34,6 +35,7 @@ use songbird::{
 };
 
 use anyhow::anyhow;
+use tokio::sync::RwLock;
 
 struct Handler;
 
@@ -50,6 +52,12 @@ impl EventHandler for Handler {
     now, vol, help
 )]
 struct General;
+
+struct SongVolume;
+
+impl TypeMapKey for SongVolume {
+    type Value = Arc<RwLock<HashMap<u64, f32>>>;
+}
 
 macro_rules! unwrap_or_show_error {
     ($f:expr, $msg:ident, $ctx:ident) => {
@@ -86,6 +94,16 @@ async fn main() {
         .register_songbird()
         .await
         .expect("Err creating client");
+
+    {
+        // Open the data lock in write mode, so keys can be inserted to it.
+        let mut data = client.data.write().await;
+
+        // The CommandCounter Value has the following type:
+        // Arc<RwLock<HashMap<String, u64>>>
+        // So, we have to insert the same type to it.
+        data.insert::<SongVolume>(Arc::new(RwLock::new(HashMap::default())));
+    }
 
     let _ = client
         .start()
@@ -440,6 +458,24 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         return Ok(());
     }
 
+    let song_volume_lock = {
+        let read = ctx.data.read().await;
+
+        read.get::<SongVolume>()
+            .expect("Expected SongVolume in TypeMap.")
+            .clone()
+    };
+
+    let volume = {
+        let mut song_volume = song_volume_lock.write().await;
+        let entry = song_volume
+            .entry(msg.channel_id.0)
+            .or_insert(1.0)
+            .to_owned();
+
+        entry
+    };
+
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let guild_id = guild.id;
 
@@ -466,11 +502,10 @@ async fn play(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         };
 
         handler.enqueue_source(source.into());
-        let metadata = handler.queue().current_queue();
-        let metadata = metadata
-            .last()
-            .ok_or_else(|| anyhow!("Can not get last!"))?
-            .metadata();
+        let queue = handler.queue().current_queue();
+        let last = queue.last().ok_or_else(|| anyhow!("Can not get last!"))?;
+        last.set_volume(volume)?;
+        let metadata = last.metadata();
         let title = metadata.title.clone();
         let url = metadata.source_url.clone();
         let s = if let Some(title) = title {
@@ -652,6 +687,19 @@ async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                 return Ok(());
             }
             let vol = vol / 100.0;
+            let song_volume_lock = {
+                let read = ctx.data.read().await;
+
+                read.get::<SongVolume>()
+                    .expect("Expected SongVolume in TypeMap.")
+                    .clone()
+            };
+            {
+                let mut song_volume = song_volume_lock.write().await;
+                let entry = song_volume.entry(msg.channel_id.0).or_insert(1.0);
+
+                *entry = vol;
+            }
             for i in list {
                 i.set_volume(vol)?;
             }
