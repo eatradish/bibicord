@@ -234,6 +234,19 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
         .clone();
     let has_handler = manager.get(guild_id).is_some();
 
+    let song_volume_lock = {
+        let read = ctx.data.read().await;
+
+        read.get::<SongVolume>()
+            .expect("Expected SongVolume in TypeMap.")
+            .clone()
+    };
+
+    {
+        let mut song_volume = song_volume_lock.write().await;
+        song_volume.remove(&msg.channel_id.0);
+    }
+
     if has_handler {
         if let Err(e) = manager.remove(guild_id).await {
             check_msg(
