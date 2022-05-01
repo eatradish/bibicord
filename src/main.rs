@@ -689,7 +689,7 @@ async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                     let vol = entry.get_info().await?.volume;
                     check_msg(
                         msg.channel_id
-                            .say(&ctx.http, format!("Volume is {:.0}", vol * 100.0))
+                            .say(&ctx.http, format!("Volume is {:.0}", (vol * 100.0).round()))
                             .await,
                     );
                 }
@@ -699,6 +699,14 @@ async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
             }
 
             return Ok(());
+        }
+        let s = args.parse::<String>()?;
+        if s.to_lowercase().contains('e') || s.contains('-') || s.contains('+') {
+            check_msg(
+                msg.channel_id
+                    .say(&ctx.http, "你他妈故意找茬是不是？你设不设音量吧？")
+                    .await,
+            );
         }
         let vol = args.single::<f32>();
         if let Ok(vol) = vol {
@@ -730,7 +738,7 @@ async fn vol(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
             }
             check_msg(
                 msg.channel_id
-                    .say(&ctx.http, format!("Volume set to {}", vol * 100.0))
+                    .say(&ctx.http, format!("Volume set to {:.0}", (vol * 100.0).round()))
                     .await,
             );
         } else {
