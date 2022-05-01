@@ -77,8 +77,16 @@ macro_rules! unwrap_or_show_error {
     };
 }
 
+const DEP_APP_LIST: &[&str] = &["ffmpeg", "ffprobe", "youtube-dl"];
+
 #[tokio::main]
 async fn main() {
+    for app in DEP_APP_LIST {
+        if which::which(app).is_err() {
+            eprintln!("Can not find {} in PATH!", app);
+            std::process::exit(1);
+        }
+    }
     tracing_subscriber::fmt::init();
 
     // Configure the client with your Discord bot token in the environment.
