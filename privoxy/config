@@ -1,0 +1,7 @@
+# 若你在大陸，在給 bibicord 掛上代理時，在 privoxy 添加這幾行讓網易雲和 bilibili 不走代理
+# Bilibili
+forward .bilivideo.cn/ .
+forward .bilibili.com/ .
+# ncm
+forward music.163.com/ .
+forward .music.126.net/ .
