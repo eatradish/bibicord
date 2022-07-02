@@ -81,6 +81,8 @@ const DEP_APP_LIST: &[&str] = &["ffmpeg", "ffprobe", "youtube-dl"];
 
 #[tokio::main]
 async fn main() {
+    dotenv::dotenv().ok();
+
     for app in DEP_APP_LIST {
         if which::which(app).is_err() {
             eprintln!("Can not find {} in PATH!", app);
